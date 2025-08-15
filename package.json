@@ -17,6 +17,8 @@
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "form-data": "^4.0.4",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "temp": "^0.9.4",
+    "ytdlp-nodejs": "^2.3.4"
   }
 }
