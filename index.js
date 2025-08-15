@@ -168,6 +168,40 @@ async function resolveRedirectUrl(url) {
           }
         }
         
+        // If we got a standard Reddit post URL, try to detect if it redirects to media
+        if (finalUrl && finalUrl.includes('reddit.com/r/') && finalUrl.includes('/comments/')) {
+          console.log(`Testing Reddit post URL for media redirects: ${finalUrl}`);
+          try {
+            // Make a request to see if Reddit redirects to a media URL
+            const mediaResponse = await axios.get(finalUrl, {
+              maxRedirects: 5,
+              timeout: 10000,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; immich-helper/1.0)'
+              }
+            });
+            
+            const mediaFinalUrl = mediaResponse.request.res.responseUrl || mediaResponse.config.url;
+            console.log(`Reddit post URL resolved to: ${mediaFinalUrl}`);
+            
+            if (mediaFinalUrl && mediaFinalUrl.includes('reddit.com/media?url=')) {
+              console.log(`Detected Reddit media redirect from post URL: ${mediaFinalUrl}`);
+              try {
+                const urlParams = new URL(mediaFinalUrl);
+                const directImageUrl = urlParams.searchParams.get('url');
+                if (directImageUrl) {
+                  console.log(`Extracted direct image URL from post redirect: ${directImageUrl}`);
+                  return directImageUrl;
+                }
+              } catch (parseError) {
+                console.warn(`Failed to parse media redirect from post URL: ${parseError.message}`);
+              }
+            }
+          } catch (mediaError) {
+            console.warn(`Failed to test Reddit post URL for media redirects: ${mediaError.message}`);
+          }
+        }
+        
         return finalUrl || url;
       } catch (axiosError) {
         console.warn(`Failed to resolve Reddit share URL ${url}: ${axiosError.message}`);
