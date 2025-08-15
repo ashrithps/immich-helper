@@ -104,6 +104,8 @@ const upload = multer({
 app.use(express.json());
 
 app.post('/upload', upload.single('image'), async (req, res) => {
+  let tempFilePath = null; // Declare at function scope for cleanup access
+  
   try {
     const apiKey = req.body.apiKey || req.headers['x-api-key'];
     if (!apiKey) {
@@ -111,7 +113,6 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     }
 
     let fileBuffer, filename, contentType;
-    let tempFilePath = null;
 
     // Check if this is a file upload or URL download
     if (req.file) {
