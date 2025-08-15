@@ -549,6 +549,17 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         return res.status(400).json(errorResponse);
       }
       
+      // Check for Reddit mobile share URLs specifically 
+      if (error.message.includes('Unsupported URL') && 
+          (error.message.includes('reddit.com/s/') || error.message.includes('reddit.com/media?url=') ||
+           (req.body.url && (req.body.url.includes('reddit.com/s/') || req.body.url.includes('www.reddit.com/s/'))))) {
+        errorResponse.error = 'Reddit mobile share URL not supported';
+        errorResponse.message = 'This Reddit mobile share URL format redirects to a format not supported by yt-dlp';
+        errorResponse.details = 'Mobile share URLs (reddit.com/s/) redirect to reddit.com/media?url= which is not supported by downloaders';
+        errorResponse.suggestion = 'Copy the direct Reddit post URL instead: reddit.com/r/subreddit/comments/postid/title/ - you can get this by opening the post on desktop Reddit or using "Copy link" instead of "Share".';
+        return res.status(400).json(errorResponse);
+      }
+      
       // Check for other unsupported URL errors
       if (error.message.includes('Unsupported URL')) {
         errorResponse.error = 'Unsupported URL format';

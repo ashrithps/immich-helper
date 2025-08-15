@@ -53,3 +53,11 @@ domain	flag	path	secure	expiration	name	value
 
 ## Usage
 When you make requests to supported platforms, the appropriate cookie file will be automatically used if available.
+
+### Supported URL Formats
+
+**Reddit**: Use direct post URLs, not mobile share links
+- ✅ `https://reddit.com/r/subreddit/comments/postid/title/`
+- ✅ `https://www.reddit.com/r/subreddit/comments/postid/title/`
+- ✅ `https://old.reddit.com/r/subreddit/comments/postid/title/`
+- ❌ `https://reddit.com/s/shortcode` (mobile share URLs - not supported)
