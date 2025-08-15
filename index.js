@@ -72,9 +72,8 @@ async function downloadWithGalleryDl(url, tempDir, cookieFile = null) {
     const args = [
       url,
       '--destination', tempDir,
-      '--filename', '{filename}.{extension}',
-      '--no-part', // Don't create .part files
-      '--no-subdirs' // Don't create subdirectories
+      '--directory', '',  // Empty directory template to avoid subdirectories
+      '--filename', '{filename}.{extension}'
     ];
     
     // Add cookie file if available
