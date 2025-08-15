@@ -1,10 +1,11 @@
-# Use Node.js 18 Alpine for smaller image size
-FROM node:18-alpine
+# Force x86_64 architecture to avoid ARM64 compatibility issues
+FROM --platform=linux/amd64 node:18-alpine
 
-# Install Python and build dependencies for yt-dlp and native modules
+# Install Python, ffmpeg, and build dependencies
 RUN apk add --no-cache \
     python3 \
     py3-pip \
+    ffmpeg \
     make \
     g++ \
     cairo-dev \
@@ -17,7 +18,7 @@ RUN apk add --no-cache \
     libjpeg-turbo-dev \
     freetype-dev
 
-# Install yt-dlp globally
+# Install yt-dlp globally using pip
 RUN pip3 install --break-system-packages yt-dlp
 
 # Set working directory

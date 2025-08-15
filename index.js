@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
-const { YtDlp } = require('ytdlp-nodejs');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 const temp = require('temp');
 const fs = require('fs');
 const path = require('path');
@@ -14,21 +14,36 @@ async function downloadFromUrl(url) {
   try {
     console.log(`Downloading from URL: ${url}`);
     
-    // Create YtDlp instance
-    const ytdlp = new YtDlp();
-    
     // Create temporary directory
     const tempDir = temp.mkdirSync('immich-download');
     
-    // Configure download options
-    const options = {
-      output: path.join(tempDir, '%(title)s.%(ext)s'),
-      format: 'best[height<=1080]', // Limit to 1080p to avoid huge files
-      noPlaylist: true
-    };
+    // Create YTDlpWrap instance (uses system yt-dlp)
+    const ytDlpWrap = new YTDlpWrap();
     
-    // Download the media using downloadAsync
-    await ytdlp.downloadAsync(url, options);
+    // Configure output filename template
+    const outputTemplate = path.join(tempDir, '%(title)s.%(ext)s');
+    
+    // Download options
+    const options = [
+      '--format', 'best[height<=1080]', // Limit to 1080p
+      '--no-playlist',
+      '--output', outputTemplate
+    ];
+    
+    // Execute yt-dlp download
+    const subprocess = ytDlpWrap.exec([url, ...options]);
+    
+    // Wait for download to complete
+    await new Promise((resolve, reject) => {
+      subprocess.on('error', reject);
+      subprocess.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`yt-dlp exited with code ${code}`));
+        }
+      });
+    });
     
     // Find the downloaded file
     const files = fs.readdirSync(tempDir);
