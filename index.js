@@ -115,6 +115,11 @@ async function downloadFromUrl(url) {
   try {
     console.log(`Downloading from URL: ${url}`);
     
+    // Note: Instagram Stories are supported but may be unreliable
+    if (url.includes('instagram.com/s/')) {
+      console.log('Warning: Instagram Stories download may be unreliable and might download multiple stories from the user.');
+    }
+    
     // Create temporary directory
     const tempDir = temp.mkdirSync('immich-download');
     
@@ -370,8 +375,9 @@ app.post('/upload', upload.single('image'), async (req, res) => {
       }
     } else if (req.body.url && req.body.url.trim() !== '') {
       // URL download using yt-dlp (only if URL is not blank)
-      console.log('Processing URL download:', req.body.url.trim());
-      const downloadResult = await downloadFromUrl(req.body.url.trim());
+      const urlToDownload = req.body.url.trim();
+      console.log('Processing URL download:', urlToDownload);
+      const downloadResult = await downloadFromUrl(urlToDownload);
       
       // Handle multiple files from gallery downloads
       if (downloadResult.files && downloadResult.files.length > 1) {
@@ -528,6 +534,23 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         message: 'Could not download media from the provided URL. Please check if the URL is valid and accessible.',
         details: error.message
       };
+      
+      // Check for Instagram Stories specifically
+      if ((req.body.url && req.body.url.includes('instagram.com/s/')) && (error.message.includes('Unsupported URL') || error.message.includes('login'))) {
+        errorResponse.error = 'Instagram Stories authentication issue';
+        errorResponse.message = 'Instagram Stories require proper authentication and may be unreliable';
+        errorResponse.details = 'Stories downloading is supported but often fails due to Instagram\'s anti-automation measures.';
+        errorResponse.suggestion = 'Try refreshing your Instagram cookies or use regular posts (/p/) or reels (/reel/) which are more reliable.';
+        return res.status(400).json(errorResponse);
+      }
+      
+      // Check for other unsupported URL errors
+      if (error.message.includes('Unsupported URL')) {
+        errorResponse.error = 'Unsupported URL format';
+        errorResponse.message = 'This URL format is not supported by the download tools.';
+        errorResponse.suggestion = 'Please check that you\'re using a direct link to a post, reel, or video from a supported platform.';
+        return res.status(400).json(errorResponse);
+      }
       
       // Check for format-related errors (these should be handled by gallery-dl fallback now)
       if (error.message.includes('Requested format is not available') || 
