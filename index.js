@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
-const YTDlpWrap = require('yt-dlp-wrap').default;
+const { spawn } = require('child_process');
 const temp = require('temp');
 const fs = require('fs');
 const path = require('path');
@@ -17,31 +17,37 @@ async function downloadFromUrl(url) {
     // Create temporary directory
     const tempDir = temp.mkdirSync('immich-download');
     
-    // Create YTDlpWrap instance (uses system yt-dlp)
-    const ytDlpWrap = new YTDlpWrap();
-    
     // Configure output filename template
     const outputTemplate = path.join(tempDir, '%(title)s.%(ext)s');
     
-    // Download options
-    const options = [
-      '--format', 'best[height<=1080]', // Limit to 1080p
+    // yt-dlp command arguments
+    const args = [
+      url,
+      '--format', 'best[height<=1080]', // Limit to 1080p to avoid huge files
       '--no-playlist',
       '--output', outputTemplate
     ];
     
-    // Execute yt-dlp download
-    const subprocess = ytDlpWrap.exec([url, ...options]);
-    
-    // Wait for download to complete
+    // Execute yt-dlp using spawn
     await new Promise((resolve, reject) => {
-      subprocess.on('error', reject);
-      subprocess.on('close', (code) => {
+      const ytdlp = spawn('yt-dlp', args);
+      
+      let stderr = '';
+      
+      ytdlp.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      ytdlp.on('close', (code) => {
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`yt-dlp exited with code ${code}`));
+          reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
         }
+      });
+      
+      ytdlp.on('error', (error) => {
+        reject(new Error(`Failed to start yt-dlp: ${error.message}`));
       });
     });
     
