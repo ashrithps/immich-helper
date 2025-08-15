@@ -136,7 +136,7 @@ async function resolveRedirectUrl(url) {
     }
     
     // For Reddit mobile share URLs, resolve to the actual post URL
-    if (url.includes('reddit.com/s/') || url.includes('www.reddit.com/s/')) {
+    if (url.includes('reddit.com/r/') && url.includes('/s/')) {
       console.log(`Resolving Reddit mobile share URL: ${url}`);
       try {
         const response = await axios.get(url, {
