@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
-const ytdlp = require('ytdlp-nodejs');
+const { YtDlp } = require('ytdlp-nodejs');
 const temp = require('temp');
 const fs = require('fs');
 const path = require('path');
@@ -14,19 +14,21 @@ async function downloadFromUrl(url) {
   try {
     console.log(`Downloading from URL: ${url}`);
     
+    // Create YtDlp instance
+    const ytdlp = new YtDlp();
+    
     // Create temporary directory
     const tempDir = temp.mkdirSync('immich-download');
     
-    // Configure yt-dlp options
+    // Configure download options
     const options = {
       output: path.join(tempDir, '%(title)s.%(ext)s'),
       format: 'best[height<=1080]', // Limit to 1080p to avoid huge files
-      noPlaylist: true,
-      extractFlat: false
+      noPlaylist: true
     };
     
-    // Download the media
-    const result = await ytdlp.download(url, options);
+    // Download the media using downloadAsync
+    await ytdlp.downloadAsync(url, options);
     
     // Find the downloaded file
     const files = fs.readdirSync(tempDir);
