@@ -6,6 +6,7 @@ This directory contains cookie files for yt-dlp to authenticate with various pla
 
 - **YouTube**: `youtube-cookie.txt`
 - **Instagram**: `instagram-cookie.txt`
+- **Reddit**: `reddit-cookie.txt`
 
 ## How to Export Cookies
 
@@ -13,7 +14,7 @@ This directory contains cookie files for yt-dlp to authenticate with various pla
 1. Install a cookie export extension:
    - Chrome: "Get cookies.txt LOCALLY" or "cookies.txt"
    - Firefox: "cookies.txt" addon
-2. Navigate to the platform (youtube.com or instagram.com)
+2. Navigate to the platform (youtube.com, instagram.com, or reddit.com)
 3. Make sure you're logged in
 4. Export cookies in Netscape format
 5. Save as the appropriate filename in this directory
@@ -25,6 +26,9 @@ yt-dlp --cookies-from-browser chrome --write-info-json --skip-download "https://
 
 # For Instagram  
 yt-dlp --cookies-from-browser chrome --write-info-json --skip-download "https://instagram.com/p/example"
+
+# For Reddit
+yt-dlp --cookies-from-browser chrome --write-info-json --skip-download "https://reddit.com/r/example/comments/id/title/"
 ```
 
 ### Method 3: Manual Browser Export
@@ -39,6 +43,7 @@ Cookie files should be in Netscape format:
 # Netscape HTTP Cookie File
 domain	flag	path	secure	expiration	name	value
 .youtube.com	TRUE	/	TRUE	1234567890	session_token	abc123...
+.reddit.com	TRUE	/	TRUE	1234567890	reddit_session	def456...
 ```
 
 ## Security Notes

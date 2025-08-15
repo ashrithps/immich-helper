@@ -41,7 +41,10 @@ function getCookieFileForUrl(url) {
       'youtu.be': 'youtube-cookie.txt',
       'm.youtube.com': 'youtube-cookie.txt',
       'instagram.com': 'instagram-cookie.txt',
-      'www.instagram.com': 'instagram-cookie.txt'
+      'www.instagram.com': 'instagram-cookie.txt',
+      'reddit.com': 'reddit-cookie.txt',
+      'www.reddit.com': 'reddit-cookie.txt',
+      'old.reddit.com': 'reddit-cookie.txt'
     };
     
     const cookieFile = cookieMap[domain];
@@ -581,7 +584,7 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         
         errorResponse.error = 'Authentication required';
         errorResponse.message = `The platform detected bot-like behavior and requires authentication. Please add cookie files to enable authenticated downloads.`;
-        errorResponse.suggestion = `Add a ${domain === 'youtube.com' ? 'youtube-cookie.txt' : domain === 'instagram.com' ? 'instagram-cookie.txt' : 'cookie'} file to the cookies/ directory. See the cookies/README.md for instructions.`;
+        errorResponse.suggestion = `Add a ${domain === 'youtube.com' ? 'youtube-cookie.txt' : domain === 'instagram.com' ? 'instagram-cookie.txt' : domain === 'reddit.com' ? 'reddit-cookie.txt' : 'cookie'} file to the cookies/ directory. See the cookies/README.md for instructions.`;
       }
       
       return res.status(400).json(errorResponse);
