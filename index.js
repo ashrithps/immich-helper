@@ -173,28 +173,43 @@ async function resolveRedirectUrl(url) {
           console.log(`Testing Reddit post URL for media redirects: ${finalUrl}`);
           try {
             // Make a request to see if Reddit redirects to a media URL
-            const mediaResponse = await axios.get(finalUrl, {
-              maxRedirects: 5,
-              timeout: 10000,
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; immich-helper/1.0)'
-              }
-            });
+            // Try multiple user agents that might trigger the redirect
+            const userAgents = [
+              'yt-dlp/2024.01.01', // yt-dlp user agent
+              'python-requests/2.31.0', // Python requests
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' // Chrome
+            ];
             
-            const mediaFinalUrl = mediaResponse.request.res.responseUrl || mediaResponse.config.url;
-            console.log(`Reddit post URL resolved to: ${mediaFinalUrl}`);
-            
-            if (mediaFinalUrl && mediaFinalUrl.includes('reddit.com/media?url=')) {
-              console.log(`Detected Reddit media redirect from post URL: ${mediaFinalUrl}`);
+            for (const userAgent of userAgents) {
+              console.log(`Trying user agent: ${userAgent}`);
               try {
-                const urlParams = new URL(mediaFinalUrl);
-                const directImageUrl = urlParams.searchParams.get('url');
-                if (directImageUrl) {
-                  console.log(`Extracted direct image URL from post redirect: ${directImageUrl}`);
-                  return directImageUrl;
+                const mediaResponse = await axios.get(finalUrl, {
+                  maxRedirects: 5,
+                  timeout: 10000,
+                  headers: {
+                    'User-Agent': userAgent
+                  }
+                });
+                
+                const mediaFinalUrl = mediaResponse.request.res.responseUrl || mediaResponse.config.url;
+                console.log(`Reddit post URL resolved to: ${mediaFinalUrl}`);
+                
+                if (mediaFinalUrl && mediaFinalUrl.includes('reddit.com/media?url=')) {
+                  console.log(`Detected Reddit media redirect from post URL: ${mediaFinalUrl}`);
+                  try {
+                    const urlParams = new URL(mediaFinalUrl);
+                    const directImageUrl = urlParams.searchParams.get('url');
+                    if (directImageUrl) {
+                      console.log(`Extracted direct image URL from post redirect: ${directImageUrl}`);
+                      return directImageUrl;
+                    }
+                  } catch (parseError) {
+                    console.warn(`Failed to parse media redirect from post URL: ${parseError.message}`);
+                  }
                 }
-              } catch (parseError) {
-                console.warn(`Failed to parse media redirect from post URL: ${parseError.message}`);
+              } catch (agentError) {
+                console.log(`User agent ${userAgent} failed: ${agentError.message}`);
+                continue; // Try next user agent
               }
             }
           } catch (mediaError) {
