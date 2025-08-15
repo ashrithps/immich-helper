@@ -536,11 +536,11 @@ app.post('/upload', upload.single('image'), async (req, res) => {
       };
       
       // Check for Instagram Stories specifically
-      if ((req.body.url && req.body.url.includes('instagram.com/s/')) && (error.message.includes('Unsupported URL') || error.message.includes('login'))) {
-        errorResponse.error = 'Instagram Stories authentication issue';
-        errorResponse.message = 'Instagram Stories require proper authentication and may be unreliable';
-        errorResponse.details = 'Stories downloading is supported but often fails due to Instagram\'s anti-automation measures.';
-        errorResponse.suggestion = 'Try refreshing your Instagram cookies or use regular posts (/p/) or reels (/reel/) which are more reliable.';
+      if ((req.body.url && req.body.url.includes('instagram.com/s/')) && error.message.includes('Unsupported URL')) {
+        errorResponse.error = 'Instagram Stories URL format not supported';
+        errorResponse.message = 'This Instagram Stories URL format is not recognized by yt-dlp';
+        errorResponse.details = 'yt-dlp expects Stories URLs in format: instagram.com/stories/username/ or instagram.com/stories/highlights/ID/';
+        errorResponse.suggestion = 'Try copying the direct story URL from Instagram web (not the mobile share URL) or use regular posts (/p/) or reels (/reel/) instead.';
         return res.status(400).json(errorResponse);
       }
       
