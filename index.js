@@ -116,11 +116,37 @@ app.post('/upload', upload.single('image'), async (req, res) => {
 
     // Check if this is a file upload or URL download
     if (req.file) {
-      // Direct file upload (existing flow)
       console.log('Processing file upload:', req.file.originalname, req.file.mimetype, `${req.file.size} bytes`);
-      fileBuffer = req.file.buffer;
-      filename = req.file.originalname || 'image.jpg';
-      contentType = req.file.mimetype;
+      
+      // Check if the uploaded "file" is actually a URL (common with iOS Shortcuts)
+      if (req.file.mimetype === 'text/plain' && req.file.size < 1000) {
+        const possibleUrl = req.file.buffer.toString('utf8').trim();
+        // Clean up URL (iOS sometimes converts : to ::: and / to :)
+        const cleanUrl = possibleUrl
+          .replace(/:::/g, '://')  // Fix protocol
+          .replace(/:(?!\/\/)/g, '/');  // Fix path separators (: to /) but keep ://
+        
+        if (cleanUrl.match(/^https?:\/\/.+/)) {
+          console.log('Detected URL in text file, processing as URL download:', cleanUrl);
+          // Process as URL download instead of file upload
+          const downloadedFile = await downloadFromUrl(cleanUrl);
+          tempFilePath = downloadedFile.path;
+          fileBuffer = fs.readFileSync(downloadedFile.path);
+          filename = downloadedFile.filename;
+          contentType = getContentType(downloadedFile.filename);
+          console.log('Downloaded file:', filename, contentType, `${fileBuffer.length} bytes`);
+        } else {
+          return res.status(400).json({ 
+            error: 'Invalid file type',
+            message: 'Text files are not supported. Please upload an image/video file or provide a URL in the request body.'
+          });
+        }
+      } else {
+        // Regular file upload
+        fileBuffer = req.file.buffer;
+        filename = req.file.originalname || 'image.jpg';
+        contentType = req.file.mimetype;
+      }
     } else if (req.body.url && req.body.url.trim() !== '') {
       // URL download using yt-dlp (only if URL is not blank)
       console.log('Processing URL download:', req.body.url.trim());
