@@ -10,6 +10,25 @@ require('dotenv').config();
 
 temp.track();
 
+function copyCookieFileToTemp(sourcePath, cookieFileName) {
+  try {
+    // Create a temporary file for the cookie
+    const tempCookieFile = temp.path({ suffix: `-${cookieFileName}` });
+    
+    // Copy the cookie file to temp location with proper permissions
+    fs.copyFileSync(sourcePath, tempCookieFile);
+    
+    // Ensure we have read/write permissions
+    fs.chmodSync(tempCookieFile, 0o644);
+    
+    console.log(`Copied cookie file to temp: ${tempCookieFile}`);
+    return tempCookieFile;
+  } catch (error) {
+    console.warn(`Failed to copy cookie file ${sourcePath}:`, error.message);
+    return null;
+  }
+}
+
 function getCookieFileForUrl(url) {
   try {
     const urlObj = new URL(url);
@@ -30,8 +49,9 @@ function getCookieFileForUrl(url) {
       const cookiePath = path.join(__dirname, 'cookies', cookieFile);
       // Check if cookie file exists
       if (fs.existsSync(cookiePath)) {
-        console.log(`Using cookie file: ${cookieFile} for domain: ${domain}`);
-        return cookiePath;
+        console.log(`Found cookie file: ${cookieFile} for domain: ${domain}`);
+        // Copy to temp location with proper permissions
+        return copyCookieFileToTemp(cookiePath, cookieFile);
       } else {
         console.log(`Cookie file ${cookieFile} not found for domain: ${domain}`);
       }

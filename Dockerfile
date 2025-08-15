@@ -25,6 +25,9 @@ COPY . .
 # Create cookies directory for authentication files
 RUN mkdir -p /app/cookies && chmod 755 /app/cookies
 
+# Ensure temp directory exists and has proper permissions for nodejs user
+RUN mkdir -p /tmp && chmod 1777 /tmp
+
 # Create user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
