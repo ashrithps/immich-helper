@@ -22,11 +22,14 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy application code
 COPY . .
 
+# Create cookies directory for authentication files
+RUN mkdir -p /app/cookies && chmod 755 /app/cookies
+
 # Create user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Change ownership of the app directory
+# Change ownership of the app directory including cookies
 RUN chown -R nodejs:nodejs /app
 USER nodejs
 

@@ -12,6 +12,7 @@ services:
       - DEVICE_ID=${DEVICE_ID:-ios-shortcut-device}
     volumes:
       - /tmp:/tmp  # For temporary file handling
+      - ./cookies:/app/cookies  # For persistent cookie storage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]

@@ -10,6 +10,40 @@ require('dotenv').config();
 
 temp.track();
 
+function getCookieFileForUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.toLowerCase();
+    
+    // Map domains to cookie files
+    const cookieMap = {
+      'youtube.com': 'youtube-cookie.txt',
+      'www.youtube.com': 'youtube-cookie.txt',
+      'youtu.be': 'youtube-cookie.txt',
+      'm.youtube.com': 'youtube-cookie.txt',
+      'instagram.com': 'instagram-cookie.txt',
+      'www.instagram.com': 'instagram-cookie.txt'
+    };
+    
+    const cookieFile = cookieMap[domain];
+    if (cookieFile) {
+      const cookiePath = path.join(__dirname, 'cookies', cookieFile);
+      // Check if cookie file exists
+      if (fs.existsSync(cookiePath)) {
+        console.log(`Using cookie file: ${cookieFile} for domain: ${domain}`);
+        return cookiePath;
+      } else {
+        console.log(`Cookie file ${cookieFile} not found for domain: ${domain}`);
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Error parsing URL for cookie detection:', error.message);
+    return null;
+  }
+}
+
 async function downloadFromUrl(url) {
   try {
     console.log(`Downloading from URL: ${url}`);
@@ -27,6 +61,12 @@ async function downloadFromUrl(url) {
       '--no-playlist',
       '--output', outputTemplate
     ];
+    
+    // Add cookie file if available for this domain
+    const cookieFile = getCookieFileForUrl(url);
+    if (cookieFile) {
+      args.push('--cookies', cookieFile);
+    }
     
     // Execute yt-dlp using spawn
     await new Promise((resolve, reject) => {
@@ -221,11 +261,33 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     
     // Handle download-specific errors
     if (error.message.includes('Failed to download from URL')) {
-      return res.status(400).json({
+      let errorResponse = {
         error: 'Download failed',
         message: 'Could not download media from the provided URL. Please check if the URL is valid and accessible.',
         details: error.message
-      });
+      };
+      
+      // Check for authentication-related errors
+      if (error.message.includes('Sign in to confirm') || 
+          error.message.includes('bot') || 
+          error.message.includes('authentication') ||
+          error.message.includes('cookies')) {
+        
+        // Try to detect the domain for specific guidance
+        const urlMatch = error.message.match(/Processing URL download: (https?:\/\/[^\s]+)/);
+        let domain = 'the platform';
+        if (urlMatch) {
+          try {
+            domain = new URL(urlMatch[1]).hostname.replace('www.', '');
+          } catch (e) {}
+        }
+        
+        errorResponse.error = 'Authentication required';
+        errorResponse.message = `The platform detected bot-like behavior and requires authentication. Please add cookie files to enable authenticated downloads.`;
+        errorResponse.suggestion = `Add a ${domain === 'youtube.com' ? 'youtube-cookie.txt' : domain === 'instagram.com' ? 'instagram-cookie.txt' : 'cookie'} file to the cookies/ directory. See the cookies/README.md for instructions.`;
+      }
+      
+      return res.status(400).json(errorResponse);
     }
     
     if (error.response) {

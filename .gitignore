@@ -48,3 +48,8 @@ coverage/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Cookie files (contain authentication tokens)
+cookies/*.txt
+!cookies/README.md
+!cookies/.gitkeep
