@@ -305,22 +305,68 @@ async function downloadFromUrl(url) {
       lastError = error;
       console.log('yt-dlp failed, trying gallery-dl as fallback...');
       
-      // Check if it's a "No video formats found" error - likely an image post
-      if (error.message.includes('No video formats found') || 
-          error.message.includes('Requested format is not available')) {
-        
-        try {
-          await downloadWithGalleryDl(url, tempDir, cookieFile);
-          downloadSuccess = true;
-          console.log('Successfully downloaded with gallery-dl');
-        } catch (galleryError) {
-          console.error('Gallery-dl also failed:', galleryError.message);
-          // Throw the original yt-dlp error since that's the primary downloader
+      // Check for Reddit media redirect URL in error message and extract direct image URL
+      if (error.message.includes('reddit.com/media?url=')) {
+        console.log('Detected Reddit media redirect URL in yt-dlp error, extracting direct image URL...');
+        const mediaUrlMatch = error.message.match(/https?:\/\/www\.reddit\.com\/media\?url=([^&\s]+)/);
+        if (mediaUrlMatch) {
+          try {
+            const encodedImageUrl = mediaUrlMatch[1];
+            const directImageUrl = decodeURIComponent(encodedImageUrl);
+            console.log(`Extracted direct Reddit image URL from error: ${directImageUrl}`);
+            
+            // Download directly from the image URL using axios
+            console.log(`Downloading image directly from: ${directImageUrl}`);
+            const imageResponse = await axios.get(directImageUrl, {
+              responseType: 'stream',
+              timeout: 30000,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; immich-helper/1.0)'
+              }
+            });
+            
+            // Determine filename from URL
+            const urlPath = new URL(directImageUrl).pathname;
+            const filename = path.basename(urlPath) || 'reddit_image.jpg';
+            const filePath = path.join(tempDir, filename);
+            
+            // Save image to temp directory
+            const writer = fs.createWriteStream(filePath);
+            imageResponse.data.pipe(writer);
+            
+            await new Promise((resolve, reject) => {
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+            
+            console.log(`Successfully downloaded Reddit image to: ${filePath}`);
+            downloadSuccess = true;
+          } catch (directDownloadError) {
+            console.error('Failed to download Reddit image directly:', directDownloadError.message);
+            // Fall through to gallery-dl attempt
+          }
+        }
+      }
+      
+      // If direct download didn't work, try gallery-dl
+      if (!downloadSuccess) {
+        // Check if it's a "No video formats found" error - likely an image post
+        if (error.message.includes('No video formats found') || 
+            error.message.includes('Requested format is not available')) {
+          
+          try {
+            await downloadWithGalleryDl(url, tempDir, cookieFile);
+            downloadSuccess = true;
+            console.log('Successfully downloaded with gallery-dl');
+          } catch (galleryError) {
+            console.error('Gallery-dl also failed:', galleryError.message);
+            // Throw the original yt-dlp error since that's the primary downloader
+            throw lastError;
+          }
+        } else {
+          // Not a format issue, throw the original error
           throw lastError;
         }
-      } else {
-        // Not a format issue, throw the original error
-        throw lastError;
       }
     }
     
