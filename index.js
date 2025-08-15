@@ -116,45 +116,66 @@ async function downloadWithGalleryDl(url, tempDir, cookieFile = null) {
 
 async function resolveRedirectUrl(url) {
   try {
+    console.log(`resolveRedirectUrl: Starting with URL: ${url}`);
+    
     // Check if this is already a Reddit media redirect URL
     if (url.includes('reddit.com/media?url=')) {
       console.log(`Detected Reddit media redirect URL: ${url}`);
-      const urlParams = new URL(url);
-      const directImageUrl = urlParams.searchParams.get('url');
-      if (directImageUrl) {
-        console.log(`Extracted direct image URL from Reddit media redirect: ${directImageUrl}`);
-        return directImageUrl;
+      try {
+        const urlParams = new URL(url);
+        const directImageUrl = urlParams.searchParams.get('url');
+        if (directImageUrl) {
+          console.log(`Extracted direct image URL from Reddit media redirect: ${directImageUrl}`);
+          return directImageUrl;
+        } else {
+          console.log(`No 'url' parameter found in Reddit media redirect: ${url}`);
+        }
+      } catch (parseError) {
+        console.warn(`Failed to parse Reddit media redirect URL: ${parseError.message}`);
       }
     }
     
     // For Reddit mobile share URLs, resolve to the actual post URL
     if (url.includes('reddit.com/s/') || url.includes('www.reddit.com/s/')) {
       console.log(`Resolving Reddit mobile share URL: ${url}`);
-      const response = await axios.get(url, {
-        maxRedirects: 5,
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; immich-helper/1.0)'
+      try {
+        const response = await axios.get(url, {
+          maxRedirects: 5,
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; immich-helper/1.0)'
+          }
+        });
+        
+        // Extract the actual post URL from the response
+        const finalUrl = response.request.res.responseUrl || response.config.url;
+        console.log(`Resolved to: ${finalUrl}`);
+        
+        // Check if the resolved URL is a Reddit media redirect
+        if (finalUrl && finalUrl.includes('reddit.com/media?url=')) {
+          console.log(`Detected Reddit media redirect in resolved URL: ${finalUrl}`);
+          try {
+            const urlParams = new URL(finalUrl);
+            const directImageUrl = urlParams.searchParams.get('url');
+            if (directImageUrl) {
+              console.log(`Extracted direct image URL from Reddit media redirect: ${directImageUrl}`);
+              return directImageUrl;
+            } else {
+              console.log(`No 'url' parameter found in resolved Reddit media redirect: ${finalUrl}`);
+            }
+          } catch (parseError) {
+            console.warn(`Failed to parse resolved Reddit media redirect URL: ${parseError.message}`);
+          }
         }
-      });
-      
-      // Extract the actual post URL from the response
-      const finalUrl = response.request.res.responseUrl || response.config.url;
-      console.log(`Resolved to: ${finalUrl}`);
-      
-      // Check if the resolved URL is a Reddit media redirect
-      if (finalUrl.includes('reddit.com/media?url=')) {
-        const urlParams = new URL(finalUrl);
-        const directImageUrl = urlParams.searchParams.get('url');
-        if (directImageUrl) {
-          console.log(`Extracted direct image URL from Reddit media redirect: ${directImageUrl}`);
-          return directImageUrl;
-        }
+        
+        return finalUrl || url;
+      } catch (axiosError) {
+        console.warn(`Failed to resolve Reddit share URL ${url}: ${axiosError.message}`);
+        return url;
       }
-      
-      return finalUrl;
     }
     
+    console.log(`resolveRedirectUrl: No resolution needed for URL: ${url}`);
     return url;
   } catch (error) {
     console.warn(`Failed to resolve redirect for ${url}:`, error.message);
@@ -167,10 +188,14 @@ async function downloadFromUrl(url) {
     console.log(`Downloading from URL: ${url}`);
     
     // Resolve redirects for mobile share URLs
+    console.log(`Calling resolveRedirectUrl for: ${url}`);
     const resolvedUrl = await resolveRedirectUrl(url);
+    console.log(`resolveRedirectUrl returned: ${resolvedUrl}`);
     if (resolvedUrl !== url) {
       console.log(`Using resolved URL: ${resolvedUrl}`);
       url = resolvedUrl;
+    } else {
+      console.log(`No URL resolution needed for: ${url}`);
     }
     
     // Note: Instagram Stories are supported but may be unreliable
