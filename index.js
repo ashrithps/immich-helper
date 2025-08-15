@@ -74,10 +74,10 @@ async function downloadFromUrl(url) {
     // Configure output filename template
     const outputTemplate = path.join(tempDir, '%(title)s.%(ext)s');
     
-    // yt-dlp command arguments
+    // yt-dlp command arguments with flexible format selection
     const args = [
       url,
-      '--format', 'best[height<=1080]', // Limit to 1080p to avoid huge files
+      '--format', 'best[height<=1080]/best[height<=720]/best', // Try 1080p, then 720p, then best available
       '--no-playlist',
       '--output', outputTemplate
     ];
@@ -286,6 +286,15 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         message: 'Could not download media from the provided URL. Please check if the URL is valid and accessible.',
         details: error.message
       };
+      
+      // Check for format-related errors
+      if (error.message.includes('Requested format is not available') || 
+          error.message.includes('Use --list-formats')) {
+        errorResponse.error = 'Format not available';
+        errorResponse.message = 'The requested video quality is not available for this media. This might be an image post or the video format is incompatible.';
+        errorResponse.suggestion = 'Try a different URL or check if this is an image post rather than a video.';
+        return res.status(400).json(errorResponse);
+      }
       
       // Check for authentication-related errors
       if (error.message.includes('Sign in to confirm') || 
