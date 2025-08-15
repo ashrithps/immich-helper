@@ -114,9 +114,64 @@ async function downloadWithGalleryDl(url, tempDir, cookieFile = null) {
   }
 }
 
+async function resolveRedirectUrl(url) {
+  try {
+    // Check if this is already a Reddit media redirect URL
+    if (url.includes('reddit.com/media?url=')) {
+      console.log(`Detected Reddit media redirect URL: ${url}`);
+      const urlParams = new URL(url);
+      const directImageUrl = urlParams.searchParams.get('url');
+      if (directImageUrl) {
+        console.log(`Extracted direct image URL from Reddit media redirect: ${directImageUrl}`);
+        return directImageUrl;
+      }
+    }
+    
+    // For Reddit mobile share URLs, resolve to the actual post URL
+    if (url.includes('reddit.com/s/') || url.includes('www.reddit.com/s/')) {
+      console.log(`Resolving Reddit mobile share URL: ${url}`);
+      const response = await axios.get(url, {
+        maxRedirects: 5,
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; immich-helper/1.0)'
+        }
+      });
+      
+      // Extract the actual post URL from the response
+      const finalUrl = response.request.res.responseUrl || response.config.url;
+      console.log(`Resolved to: ${finalUrl}`);
+      
+      // Check if the resolved URL is a Reddit media redirect
+      if (finalUrl.includes('reddit.com/media?url=')) {
+        const urlParams = new URL(finalUrl);
+        const directImageUrl = urlParams.searchParams.get('url');
+        if (directImageUrl) {
+          console.log(`Extracted direct image URL from Reddit media redirect: ${directImageUrl}`);
+          return directImageUrl;
+        }
+      }
+      
+      return finalUrl;
+    }
+    
+    return url;
+  } catch (error) {
+    console.warn(`Failed to resolve redirect for ${url}:`, error.message);
+    return url; // Return original URL if resolution fails
+  }
+}
+
 async function downloadFromUrl(url) {
   try {
     console.log(`Downloading from URL: ${url}`);
+    
+    // Resolve redirects for mobile share URLs
+    const resolvedUrl = await resolveRedirectUrl(url);
+    if (resolvedUrl !== url) {
+      console.log(`Using resolved URL: ${resolvedUrl}`);
+      url = resolvedUrl;
+    }
     
     // Note: Instagram Stories are supported but may be unreliable
     if (url.includes('instagram.com/s/')) {
@@ -549,14 +604,15 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         return res.status(400).json(errorResponse);
       }
       
-      // Check for Reddit mobile share URLs specifically 
+      // Check for Reddit URLs that still failed after resolution
       if (error.message.includes('Unsupported URL') && 
-          (error.message.includes('reddit.com/s/') || error.message.includes('reddit.com/media?url=') ||
-           (req.body.url && (req.body.url.includes('reddit.com/s/') || req.body.url.includes('www.reddit.com/s/'))))) {
-        errorResponse.error = 'Reddit mobile share URL not supported';
-        errorResponse.message = 'This Reddit mobile share URL format redirects to a format not supported by yt-dlp';
-        errorResponse.details = 'Mobile share URLs (reddit.com/s/) redirect to reddit.com/media?url= which is not supported by downloaders';
-        errorResponse.suggestion = 'Copy the direct Reddit post URL instead: reddit.com/r/subreddit/comments/postid/title/ - you can get this by opening the post on desktop Reddit or using "Copy link" instead of "Share".';
+          (error.message.includes('reddit.com/media?url=') || 
+           error.message.includes('reddit.com') ||
+           (req.body.url && req.body.url.includes('reddit.com')))) {
+        errorResponse.error = 'Reddit URL not supported';
+        errorResponse.message = 'This Reddit URL format is not supported by the download tools';
+        errorResponse.details = 'Reddit URLs may redirect to formats not supported by yt-dlp or gallery-dl';
+        errorResponse.suggestion = 'Try using the direct Reddit post URL: reddit.com/r/subreddit/comments/postid/title/ - open the post on desktop Reddit and copy the URL from the address bar.';
         return res.status(400).json(errorResponse);
       }
       
