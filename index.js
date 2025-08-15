@@ -535,8 +535,10 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         details: error.message
       };
       
-      // Check for Instagram Stories specifically
-      if ((req.body.url && req.body.url.includes('instagram.com/s/')) && error.message.includes('Unsupported URL')) {
+      // Check for Instagram Stories specifically (check both body URL and error message content)
+      if (error.message.includes('Unsupported URL') && 
+          (error.message.includes('instagram.com/s/') || 
+           (req.body.url && req.body.url.includes('instagram.com/s/')))) {
         errorResponse.error = 'Instagram Stories URL format not supported';
         errorResponse.message = 'This Instagram Stories URL format is not recognized by yt-dlp';
         errorResponse.details = 'yt-dlp expects Stories URLs in format: instagram.com/stories/username/ or instagram.com/stories/highlights/ID/';
