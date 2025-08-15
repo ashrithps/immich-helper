@@ -117,16 +117,19 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     // Check if this is a file upload or URL download
     if (req.file) {
       // Direct file upload (existing flow)
+      console.log('Processing file upload:', req.file.originalname, req.file.mimetype, `${req.file.size} bytes`);
       fileBuffer = req.file.buffer;
       filename = req.file.originalname || 'image.jpg';
       contentType = req.file.mimetype;
     } else if (req.body.url && req.body.url.trim() !== '') {
       // URL download using yt-dlp (only if URL is not blank)
+      console.log('Processing URL download:', req.body.url.trim());
       const downloadedFile = await downloadFromUrl(req.body.url.trim());
       tempFilePath = downloadedFile.path;
       fileBuffer = fs.readFileSync(downloadedFile.path);
       filename = downloadedFile.filename;
       contentType = getContentType(downloadedFile.filename);
+      console.log('Downloaded file:', filename, contentType, `${fileBuffer.length} bytes`);
     } else {
       return res.status(400).json({ error: 'Either image file or URL is required' });
     }
@@ -150,6 +153,10 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     formData.append('fileCreatedAt', new Date().toISOString());
     formData.append('fileModifiedAt', new Date().toISOString());
 
+    console.log(`Uploading to Immich: ${immichUrl}/api/assets`);
+    console.log('Form data fields:', Object.keys(formData._streams || {}));
+    console.log('Headers:', { ...formData.getHeaders(), 'x-api-key': '***' });
+    
     const response = await axios.post(`${immichUrl}/api/assets`, formData, {
       headers: {
         ...formData.getHeaders(),
@@ -196,8 +203,17 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     }
     
     if (error.response) {
+      console.error('Immich server error details:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+      
       return res.status(error.response.status).json({
         error: 'Immich server error',
+        status: error.response.status,
+        statusText: error.response.statusText,
         details: error.response.data
       });
     }
