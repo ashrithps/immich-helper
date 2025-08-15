@@ -7,8 +7,8 @@ RUN apk add --no-cache \
     py3-pip \
     ffmpeg
 
-# Install yt-dlp globally using pip
-RUN pip3 install --break-system-packages yt-dlp
+# Install yt-dlp and gallery-dl globally using pip
+RUN pip3 install --break-system-packages yt-dlp gallery-dl
 
 # Set working directory
 WORKDIR /app

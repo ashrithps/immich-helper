@@ -64,6 +64,53 @@ function getCookieFileForUrl(url) {
   }
 }
 
+async function downloadWithGalleryDl(url, tempDir, cookieFile = null) {
+  try {
+    console.log(`Trying gallery-dl for URL: ${url}`);
+    
+    // gallery-dl command arguments
+    const args = [
+      url,
+      '--destination', tempDir,
+      '--filename', '{title}.{extension}',
+      '--no-part' // Don't create .part files
+    ];
+    
+    // Add cookie file if available
+    if (cookieFile) {
+      args.push('--cookies', cookieFile);
+    }
+    
+    // Execute gallery-dl using spawn
+    await new Promise((resolve, reject) => {
+      const gallerydl = spawn('gallery-dl', args);
+      
+      let stderr = '';
+      
+      gallerydl.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      gallerydl.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`gallery-dl exited with code ${code}: ${stderr}`));
+        }
+      });
+      
+      gallerydl.on('error', (error) => {
+        reject(new Error(`Failed to start gallery-dl: ${error.message}`));
+      });
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Gallery-dl error:', error.message);
+    throw error;
+  }
+}
+
 async function downloadFromUrl(url) {
   try {
     console.log(`Downloading from URL: ${url}`);
@@ -88,28 +135,57 @@ async function downloadFromUrl(url) {
       args.push('--cookies', cookieFile);
     }
     
-    // Execute yt-dlp using spawn
-    await new Promise((resolve, reject) => {
-      const ytdlp = spawn('yt-dlp', args);
-      
-      let stderr = '';
-      
-      ytdlp.stderr.on('data', (data) => {
-        stderr += data.toString();
+    // Try yt-dlp first, fallback to gallery-dl for images
+    let downloadSuccess = false;
+    let lastError = null;
+    
+    try {
+      // Execute yt-dlp using spawn
+      await new Promise((resolve, reject) => {
+        const ytdlp = spawn('yt-dlp', args);
+        
+        let stderr = '';
+        
+        ytdlp.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+        
+        ytdlp.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
+          }
+        });
+        
+        ytdlp.on('error', (error) => {
+          reject(new Error(`Failed to start yt-dlp: ${error.message}`));
+        });
       });
       
-      ytdlp.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
+      downloadSuccess = true;
+    } catch (error) {
+      lastError = error;
+      console.log('yt-dlp failed, trying gallery-dl as fallback...');
+      
+      // Check if it's a "No video formats found" error - likely an image post
+      if (error.message.includes('No video formats found') || 
+          error.message.includes('Requested format is not available')) {
+        
+        try {
+          await downloadWithGalleryDl(url, tempDir, cookieFile);
+          downloadSuccess = true;
+          console.log('Successfully downloaded with gallery-dl');
+        } catch (galleryError) {
+          console.error('Gallery-dl also failed:', galleryError.message);
+          // Throw the original yt-dlp error since that's the primary downloader
+          throw lastError;
         }
-      });
-      
-      ytdlp.on('error', (error) => {
-        reject(new Error(`Failed to start yt-dlp: ${error.message}`));
-      });
-    });
+      } else {
+        // Not a format issue, throw the original error
+        throw lastError;
+      }
+    }
     
     // Find the downloaded file
     const files = fs.readdirSync(tempDir);
@@ -287,12 +363,13 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         details: error.message
       };
       
-      // Check for format-related errors
+      // Check for format-related errors (these should be handled by gallery-dl fallback now)
       if (error.message.includes('Requested format is not available') || 
-          error.message.includes('Use --list-formats')) {
-        errorResponse.error = 'Format not available';
-        errorResponse.message = 'The requested video quality is not available for this media. This might be an image post or the video format is incompatible.';
-        errorResponse.suggestion = 'Try a different URL or check if this is an image post rather than a video.';
+          error.message.includes('Use --list-formats') ||
+          error.message.includes('No video formats found')) {
+        errorResponse.error = 'Media not accessible';
+        errorResponse.message = 'Could not download this media. Both video (yt-dlp) and image (gallery-dl) downloaders failed.';
+        errorResponse.suggestion = 'This may be a private post, unsupported platform, or require authentication. Try adding cookie files if not already present.';
         return res.status(400).json(errorResponse);
       }
       
