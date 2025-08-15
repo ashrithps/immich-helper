@@ -73,7 +73,7 @@ async function downloadWithGalleryDl(url, tempDir, cookieFile = null) {
       url,
       '--destination', tempDir,
       '--directory', '',  // Empty directory template to avoid subdirectories
-      '--filename', '{filename}.{extension}'
+      '--filename', '{num:>02}_{filename}.{extension}' // Add numbering for multiple files
     ];
     
     // Add cookie file if available
@@ -187,18 +187,22 @@ async function downloadFromUrl(url) {
       }
     }
     
-    // Find the downloaded file
+    // Find all downloaded files
     const files = fs.readdirSync(tempDir);
     if (files.length === 0) {
       throw new Error('No files were downloaded');
     }
     
-    const downloadedFile = files[0];
-    const filePath = path.join(tempDir, downloadedFile);
+    // Sort files to maintain order for multi-image posts
+    files.sort();
     
+    // Return all files for multi-image support
     return {
-      path: filePath,
-      filename: downloadedFile
+      tempDir: tempDir,
+      files: files.map(filename => ({
+        path: path.join(tempDir, filename),
+        filename: filename
+      }))
     };
     
   } catch (error) {
@@ -265,12 +269,93 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         if (cleanUrl.match(/^https?:\/\/.+/)) {
           console.log('Detected URL in text file, processing as URL download:', cleanUrl);
           // Process as URL download instead of file upload
-          const downloadedFile = await downloadFromUrl(cleanUrl);
-          tempFilePath = downloadedFile.path;
-          fileBuffer = fs.readFileSync(downloadedFile.path);
-          filename = downloadedFile.filename;
-          contentType = getContentType(downloadedFile.filename);
-          console.log('Downloaded file:', filename, contentType, `${fileBuffer.length} bytes`);
+          const downloadResult = await downloadFromUrl(cleanUrl);
+          
+          // Handle multiple files from text file URL (same logic as body URL)
+          if (downloadResult.files && downloadResult.files.length > 1) {
+            console.log(`Downloaded ${downloadResult.files.length} files from carousel post via text file`);
+            
+            const immichUrl = process.env.IMMICH_SERVER_URL;
+            if (!immichUrl) {
+              return res.status(500).json({ error: 'Immich server URL not configured' });
+            }
+            
+            const uploadResults = [];
+            const errors = [];
+            
+            // Upload each file individually
+            for (let i = 0; i < downloadResult.files.length; i++) {
+              const file = downloadResult.files[i];
+              try {
+                console.log(`Uploading file ${i + 1}/${downloadResult.files.length}: ${file.filename}`);
+                
+                const fileBuffer = fs.readFileSync(file.path);
+                const contentType = getContentType(file.filename);
+                
+                const formData = new FormData();
+                formData.append('assetData', fileBuffer, {
+                  filename: file.filename,
+                  contentType: contentType
+                });
+
+                const deviceAssetId = `ios-shortcut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`;
+                const deviceId = process.env.DEVICE_ID || 'ios-shortcut-device';
+                
+                formData.append('deviceAssetId', deviceAssetId);
+                formData.append('deviceId', deviceId);
+                formData.append('fileCreatedAt', new Date().toISOString());
+                formData.append('fileModifiedAt', new Date().toISOString());
+
+                const response = await axios.post(`${immichUrl}/api/assets`, formData, {
+                  headers: {
+                    ...formData.getHeaders(),
+                    'x-api-key': apiKey,
+                  },
+                  timeout: 30000
+                });
+                
+                uploadResults.push({
+                  filename: file.filename,
+                  success: true,
+                  immichResponse: response.data
+                });
+                
+              } catch (uploadError) {
+                console.error(`Failed to upload ${file.filename}:`, uploadError.message);
+                errors.push({
+                  filename: file.filename,
+                  error: uploadError.message
+                });
+              }
+            }
+            
+            // Clean up temp directory
+            try {
+              downloadResult.files.forEach(file => fs.unlinkSync(file.path));
+              fs.rmdirSync(downloadResult.tempDir);
+            } catch (cleanupError) {
+              console.warn('Failed to cleanup temporary files:', cleanupError.message);
+            }
+            
+            // Return results
+            return res.json({
+              success: uploadResults.length > 0,
+              message: `Uploaded ${uploadResults.length}/${downloadResult.files.length} images from carousel post`,
+              source: 'file_url_download_carousel',
+              totalFiles: downloadResult.files.length,
+              successfulUploads: uploadResults.length,
+              results: uploadResults,
+              errors: errors.length > 0 ? errors : undefined
+            });
+          } else {
+            // Single file download
+            const singleFile = downloadResult.files[0];
+            tempFilePath = singleFile.path;
+            fileBuffer = fs.readFileSync(singleFile.path);
+            filename = singleFile.filename;
+            contentType = getContentType(singleFile.filename);
+            console.log('Downloaded file:', filename, contentType, `${fileBuffer.length} bytes`);
+          }
         } else {
           return res.status(400).json({ 
             error: 'Invalid file type',
@@ -286,12 +371,93 @@ app.post('/upload', upload.single('image'), async (req, res) => {
     } else if (req.body.url && req.body.url.trim() !== '') {
       // URL download using yt-dlp (only if URL is not blank)
       console.log('Processing URL download:', req.body.url.trim());
-      const downloadedFile = await downloadFromUrl(req.body.url.trim());
-      tempFilePath = downloadedFile.path;
-      fileBuffer = fs.readFileSync(downloadedFile.path);
-      filename = downloadedFile.filename;
-      contentType = getContentType(downloadedFile.filename);
-      console.log('Downloaded file:', filename, contentType, `${fileBuffer.length} bytes`);
+      const downloadResult = await downloadFromUrl(req.body.url.trim());
+      
+      // Handle multiple files from gallery downloads
+      if (downloadResult.files && downloadResult.files.length > 1) {
+        console.log(`Downloaded ${downloadResult.files.length} files from carousel post`);
+        
+        const immichUrl = process.env.IMMICH_SERVER_URL;
+        if (!immichUrl) {
+          return res.status(500).json({ error: 'Immich server URL not configured' });
+        }
+        
+        const uploadResults = [];
+        const errors = [];
+        
+        // Upload each file individually
+        for (let i = 0; i < downloadResult.files.length; i++) {
+          const file = downloadResult.files[i];
+          try {
+            console.log(`Uploading file ${i + 1}/${downloadResult.files.length}: ${file.filename}`);
+            
+            const fileBuffer = fs.readFileSync(file.path);
+            const contentType = getContentType(file.filename);
+            
+            const formData = new FormData();
+            formData.append('assetData', fileBuffer, {
+              filename: file.filename,
+              contentType: contentType
+            });
+
+            const deviceAssetId = `ios-shortcut-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`;
+            const deviceId = process.env.DEVICE_ID || 'ios-shortcut-device';
+            
+            formData.append('deviceAssetId', deviceAssetId);
+            formData.append('deviceId', deviceId);
+            formData.append('fileCreatedAt', new Date().toISOString());
+            formData.append('fileModifiedAt', new Date().toISOString());
+
+            const response = await axios.post(`${immichUrl}/api/assets`, formData, {
+              headers: {
+                ...formData.getHeaders(),
+                'x-api-key': apiKey,
+              },
+              timeout: 30000
+            });
+            
+            uploadResults.push({
+              filename: file.filename,
+              success: true,
+              immichResponse: response.data
+            });
+            
+          } catch (uploadError) {
+            console.error(`Failed to upload ${file.filename}:`, uploadError.message);
+            errors.push({
+              filename: file.filename,
+              error: uploadError.message
+            });
+          }
+        }
+        
+        // Clean up temp directory
+        try {
+          downloadResult.files.forEach(file => fs.unlinkSync(file.path));
+          fs.rmdirSync(downloadResult.tempDir);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup temporary files:', cleanupError.message);
+        }
+        
+        // Return results
+        return res.json({
+          success: uploadResults.length > 0,
+          message: `Uploaded ${uploadResults.length}/${downloadResult.files.length} images from carousel post`,
+          source: 'url_download_carousel',
+          totalFiles: downloadResult.files.length,
+          successfulUploads: uploadResults.length,
+          results: uploadResults,
+          errors: errors.length > 0 ? errors : undefined
+        });
+      } else {
+        // Single file download (original logic)
+        const singleFile = downloadResult.files[0];
+        tempFilePath = singleFile.path;
+        fileBuffer = fs.readFileSync(singleFile.path);
+        filename = singleFile.filename;
+        contentType = getContentType(singleFile.filename);
+        console.log('Downloaded file:', filename, contentType, `${fileBuffer.length} bytes`);
+      }
     } else {
       return res.status(400).json({ error: 'Either image file or URL is required' });
     }
